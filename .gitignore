@@ -3,6 +3,12 @@ __pycache__/
 *.py[codz]
 *$py.class
 
+# gemini-cli settings
+.gemini/
+
+# GitHub App credentials
+gha-creds-*.json
+
 # C extensions
 *.so
 
