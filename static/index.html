@@ -1,0 +1,1432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pizarra</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Patrick+Hand&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      color-scheme: light dark;
+      --font-ui: "Space Grotesk", sans-serif;
+      --font-hand: "Patrick Hand", cursive;
+      --page: #f1eee7;
+      --surface: #f7f4ee;
+      --board-bg: #fbfaf7;
+      --ink: #1d2220;
+      --muted: #68706a;
+      --line: rgba(29, 34, 32, 0.14);
+      --accent: #2c55bf;
+      --accent-soft: rgba(44, 85, 191, 0.12);
+      --accent-quiet: rgba(44, 85, 191, 0.22);
+      --warm: #ba6a3f;
+      --success: #2c7a56;
+      --canvas-ink: #161d25;
+      --canvas-muted: #5f6874;
+      --canvas-accent: #2c55bf;
+      --canvas-accent-soft: rgba(44, 85, 191, 0.1);
+      --canvas-success: #2c7a56;
+      --canvas-warm: #ba6a3f;
+      --canvas-highlight: rgba(255, 211, 92, 0.32);
+      --canvas-paper: #fbfaf7;
+      --canvas-paper-edge: #edeae2;
+      --focus-ring: 0 0 0 3px var(--accent-soft);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      font-family: var(--font-ui);
+      background: var(--canvas-paper);
+    }
+
+    canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      display: block;
+    }
+
+    /* ── Floating input bar ───────────────────────────────────────────── */
+
+    .floating-bar {
+      position: fixed;
+      bottom: 28px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: min(680px, calc(100% - 32px));
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      z-index: 100;
+      animation: bar-rise 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    }
+
+    .bar-inner {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--surface);
+      border-radius: 999px;
+      padding: 7px 7px 7px 22px;
+      box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.14),
+        0 2px 8px rgba(0, 0, 0, 0.08);
+      border: 1px solid var(--line);
+      transition: box-shadow 200ms ease;
+    }
+
+    .bar-inner:focus-within {
+      box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.14),
+        0 2px 8px rgba(0, 0, 0, 0.08),
+        0 0 0 3px var(--accent-soft);
+    }
+
+    #problem-input {
+      flex: 1;
+      min-width: 0;
+      border: 0;
+      background: transparent;
+      outline: none;
+      font: inherit;
+      font-size: 16px;
+      font-weight: 500;
+      color: var(--ink);
+      caret-color: var(--accent);
+    }
+
+    #problem-input::placeholder {
+      color: var(--muted);
+      font-weight: 400;
+    }
+
+    #kbd-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: 1px solid var(--line);
+      background: transparent;
+      font-size: 17px;
+      color: var(--muted);
+      cursor: pointer;
+      flex-shrink: 0;
+      transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease, transform 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    #kbd-toggle:hover {
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-color: var(--accent-quiet);
+    }
+
+    #kbd-toggle.is-active {
+      background: var(--accent-soft);
+      color: var(--accent);
+      border-color: var(--accent-quiet);
+      transform: rotate(20deg) scale(1.06);
+    }
+
+    #kbd-toggle:focus-visible {
+      outline: none;
+      box-shadow: var(--focus-ring);
+    }
+
+    #solve-btn {
+      height: 44px;
+      padding: 0 24px;
+      border-radius: 999px;
+      border: 0;
+      background: var(--accent);
+      color: var(--board-bg);
+      font: inherit;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      flex-shrink: 0;
+      transition:
+        transform 140ms cubic-bezier(0.22, 1, 0.36, 1),
+        box-shadow 140ms ease,
+        opacity 140ms ease,
+        background 140ms ease;
+    }
+
+    #solve-btn:hover:not(:disabled):not(.is-loading) {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 14px var(--accent-quiet);
+    }
+
+    #solve-btn:active:not(:disabled) {
+      transform: scale(0.96) translateY(0);
+      box-shadow: none;
+    }
+
+    #solve-btn:focus-visible {
+      outline: none;
+      box-shadow: var(--focus-ring);
+    }
+
+    #solve-btn:disabled { cursor: not-allowed; opacity: 0.48; }
+
+    #solve-btn.is-loading {
+      animation: btn-pulse 1.3s ease-in-out infinite;
+    }
+
+    /* ── Scientific keyboard ──────────────────────────────────────────── */
+
+    .sci-keyboard {
+      position: absolute;
+      bottom: calc(100% + 8px);
+      left: 0;
+      width: 100%;
+      background: var(--surface);
+      border-radius: 16px;
+      box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.14),
+        0 2px 8px rgba(0, 0, 0, 0.08);
+      border: 1px solid var(--line);
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 6px;
+      padding: 12px;
+      /* Collapsed state — animates to open via transform/opacity */
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(12px) scale(0.98);
+      transform-origin: bottom center;
+      transition:
+        opacity    200ms ease,
+        transform  280ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+
+    .sci-keyboard.is-open {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0) scale(1);
+    }
+
+    .sci-key {
+      font: inherit;
+      font-size: 14px;
+      font-weight: 600;
+      height: 44px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: var(--board-bg);
+      color: var(--ink);
+      cursor: pointer;
+      transition: background 0.12s, border-color 0.12s, color 0.12s, transform 0.1s ease;
+    }
+
+    .sci-key:hover {
+      background: var(--accent-soft);
+      border-color: var(--accent-quiet);
+      color: var(--accent);
+    }
+
+    .sci-key:focus-visible {
+      outline: none;
+      box-shadow: var(--focus-ring);
+    }
+
+    .sci-key:active {
+      transform: scale(0.9);
+    }
+
+    /* ── Timeline bar ────────────────────────────────────────────────── */
+
+    .timeline-bar {
+      position: fixed;
+      bottom: 96px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: min(680px, calc(100% - 32px));
+      display: flex;
+      gap: 4px;
+      align-items: center;
+      z-index: 100;
+      height: 20px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 300ms ease;
+    }
+
+    .timeline-bar.has-steps {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .tl-seg {
+      flex: 1;
+      height: 3px;
+      border-radius: 999px;
+      background: var(--line);
+      cursor: pointer;
+      transition: background 300ms ease, transform 150ms ease;
+      position: relative;
+    }
+
+    /* Expand click area without affecting visual height */
+    .tl-seg::before {
+      content: '';
+      position: absolute;
+      inset: -20px 0;
+    }
+
+    .tl-seg:focus-visible {
+      outline: none;
+    }
+
+    .tl-seg:focus-visible::after {
+      content: '';
+      position: absolute;
+      inset: -4px;
+      border-radius: 999px;
+      box-shadow: var(--focus-ring);
+    }
+
+    .tl-seg:hover { transform: scaleY(1.8); }
+
+    .tl-seg.is-done { background: var(--accent-quiet); }
+
+    .tl-seg.is-current {
+      background: var(--accent);
+      transform: scaleY(1.4);
+    }
+
+    .tl-seg.is-current:hover { transform: scaleY(1.8); }
+
+    /* ── Utility ──────────────────────────────────────────────────────── */
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+
+    [hidden] { display: none !important; }
+
+    /* ── Dark mode ────────────────────────────────────────────────────── */
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --page: #111417;
+        --surface: #1c2026;
+        --board-bg: #15191d;
+        --ink: #ecefe9;
+        --muted: #9ea69f;
+        --line: rgba(236, 239, 233, 0.13);
+        --accent: #9ab1ff;
+        --accent-soft: rgba(154, 177, 255, 0.14);
+        --accent-quiet: rgba(154, 177, 255, 0.3);
+        --warm: #d69368;
+        --success: #6bc190;
+        --canvas-ink: #eef2f8;
+        --canvas-muted: #a6afbc;
+        --canvas-accent: #9ab1ff;
+        --canvas-accent-soft: rgba(154, 177, 255, 0.12);
+        --canvas-success: #6bc190;
+        --canvas-warm: #d69368;
+        --canvas-highlight: rgba(255, 210, 92, 0.25);
+        --canvas-paper: #13171b;
+        --canvas-paper-edge: #0e1114;
+      }
+    }
+
+    /* ── Keyframe animations ──────────────────────────────────────────── */
+
+    @keyframes bar-rise {
+      from { opacity: 0; transform: translateX(-50%) translateY(18px); }
+      to   { opacity: 1; transform: translateX(-50%) translateY(0);    }
+    }
+
+    @keyframes btn-pulse {
+      0%, 100% { opacity: 1;    }
+      50%       { opacity: 0.55; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+    #helper-image-container {
+      position: fixed;
+      top: 32px;
+      right: 32px;
+      max-width: 320px;
+      max-height: 240px;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.14);
+      border: 1px solid var(--line);
+      z-index: 90;
+      opacity: 0;
+      transform: translateY(-20px);
+      transition: opacity 400ms ease, transform 400ms cubic-bezier(0.22, 1, 0.36, 1);
+      pointer-events: none;
+    }
+
+    #helper-image-container.is-visible {
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: auto;
+    }
+
+    #helper-image {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="board" role="img" aria-label="Math board"></canvas>
+
+  <div id="helper-image-container">
+    <img id="helper-image" src="" alt="Helper visual aid" />
+  </div>
+
+  <div class="timeline-bar" id="timeline-bar" aria-label="Solution steps"></div>
+
+  <div class="floating-bar" id="floating-bar">
+    <div class="sci-keyboard" id="sci-keyboard"></div>
+    <div class="bar-inner">
+      <input id="problem-input" type="text"
+        placeholder="Try: 432 + 189, 84 ÷ 6, x² – 5x + 6 = 0, ∫ 3x² dx"
+        aria-label="Enter a math problem"
+        autocomplete="off" spellcheck="false">
+      <button id="kbd-toggle" type="button" aria-label="Toggle scientific keyboard" title="Scientific keyboard">∑</button>
+      <button id="solve-btn" type="button">Solve</button>
+    </div>
+  </div>
+
+  <span id="status" class="sr-only" role="status" aria-live="polite">Ready.</span>
+
+  <script>
+    const input       = document.getElementById("problem-input");
+    const solveBtn    = document.getElementById("solve-btn");
+    const canvas      = document.getElementById("board");
+    const ctx         = canvas.getContext("2d");
+    const kbdToggle   = document.getElementById("kbd-toggle");
+    const sciKeyboard = document.getElementById("sci-keyboard");
+    const statusEl    = document.getElementById("status");
+    const timelineEl  = document.getElementById("timeline-bar");
+
+    const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const DPR = Math.min(window.devicePixelRatio || 1, 2);
+    const cs  = getComputedStyle(document.documentElement);
+
+    const COLORS = {
+      ink:        cs.getPropertyValue("--canvas-ink").trim(),
+      muted:      cs.getPropertyValue("--canvas-muted").trim(),
+      accent:     cs.getPropertyValue("--canvas-accent").trim(),
+      accentSoft: cs.getPropertyValue("--canvas-accent-soft").trim(),
+      success:    cs.getPropertyValue("--canvas-success").trim(),
+      warm:       cs.getPropertyValue("--canvas-warm").trim(),
+      highlight:  cs.getPropertyValue("--canvas-highlight").trim(),
+      paper:      cs.getPropertyValue("--canvas-paper").trim(),
+      paperEdge:  cs.getPropertyValue("--canvas-paper-edge").trim(),
+    };
+
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+      COLORS.ink        = cs.getPropertyValue("--canvas-ink").trim();
+      COLORS.muted      = cs.getPropertyValue("--canvas-muted").trim();
+      COLORS.accent     = cs.getPropertyValue("--canvas-accent").trim();
+      COLORS.accentSoft = cs.getPropertyValue("--canvas-accent-soft").trim();
+      COLORS.success    = cs.getPropertyValue("--canvas-success").trim();
+      COLORS.warm       = cs.getPropertyValue("--canvas-warm").trim();
+      COLORS.highlight  = cs.getPropertyValue("--canvas-highlight").trim();
+      COLORS.paper      = cs.getPropertyValue("--canvas-paper").trim();
+      COLORS.paperEdge  = cs.getPropertyValue("--canvas-paper-edge").trim();
+      requestRender();
+    });
+
+    const UI_FONT   = cs.getPropertyValue("--font-ui").trim()   || '"Space Grotesk", sans-serif';
+    const HAND_FONT = cs.getPropertyValue("--font-hand").trim() || '"Patrick Hand", cursive';
+
+    // Viewport-relative coordinate system — updated on resize
+    let W = window.innerWidth;
+    let H = window.innerHeight;
+
+    let solution         = emptySolution();
+    let currentStepIndex = 0;
+    let transition       = null;
+    let highlightPulse   = null;
+    let animationFrame   = null;
+    let solutionLoadTime  = -Infinity;  // tracks when the last solution was loaded (for canvas fade-in)
+    let stepLoadedTime    = -Infinity;  // tracks when the current step started
+    let autoAdvanceTimer  = null;
+
+    // ── Handwriting Cache ──────────────────────────────────────────────
+
+    const strokeCache = new Map();
+
+    function getStrokesForChar(char, font) {
+      const key = `${char}-${font}`;
+      if (strokeCache.has(key)) return strokeCache.get(key);
+
+      const canvas = document.createElement("canvas");
+      const size = 64;
+      canvas.width = size;
+      canvas.height = size;
+      const tctx = canvas.getContext("2d");
+      tctx.font = font;
+      tctx.textBaseline = "middle";
+      tctx.textAlign = "center";
+      tctx.fillText(char, size / 2, size / 2);
+
+      const imgData = tctx.getImageData(0, 0, size, size).data;
+      const pixels = [];
+      for (let i = 0; i < imgData.length; i += 4) {
+        if (imgData[i + 3] > 120) {
+          const pIdx = i / 4;
+          pixels.push({ x: pIdx % size, y: Math.floor(pIdx / size) });
+        }
+      }
+
+      if (pixels.length === 0) {
+        strokeCache.set(key, []);
+        return [];
+      }
+
+      const strokes = [];
+      const visited = new Set();
+      while (visited.size < pixels.length) {
+        let startP = null;
+        for (const p of pixels) {
+          if (!visited.has(p)) {
+            if (!startP || p.y < startP.y || (p.y === startP.y && p.x < startP.x)) startP = p;
+          }
+        }
+        if (!startP) break;
+        const stroke = [];
+        let curr = startP;
+        while (curr) {
+          visited.add(curr);
+          stroke.push({ x: (curr.x - size / 2) / size, y: (curr.y - size / 2) / size });
+          let next = null;
+          let minDist = Infinity;
+          for (const p of pixels) {
+            if (!visited.has(p)) {
+              const dx = p.x - curr.x;
+              const dy = p.y - curr.y;
+              const d = dx * dx + dy * dy;
+              if (d < minDist) { minDist = d; next = p; }
+            }
+          }
+          if (next && minDist < 18) curr = next; else curr = null;
+        }
+        strokes.push(stroke);
+      }
+      strokeCache.set(key, strokes);
+      return strokes;
+    }
+
+    // ── Scientific keyboard ──────────────────────────────────────────────
+
+    const KB_SYMBOLS = [
+      { label: 'x²',  insert: '^2'    },
+      { label: '√',   insert: '√('    },
+      { label: '^',   insert: '^'     },
+      { label: '(',   insert: '('     },
+      { label: ')',   insert: ')'     },
+      { label: 'π',   insert: 'π'     },
+      { label: '÷',   insert: '÷'     },
+      { label: '×',   insert: '×'     },
+      { label: 'e',   insert: 'e'     },
+      { label: 'sin', insert: 'sin('  },
+      { label: 'cos', insert: 'cos('  },
+      { label: 'tan', insert: 'tan('  },
+      { label: 'log', insert: 'log('  },
+      { label: '∫',   insert: '∫'     },
+      { label: 'd/dx',insert: 'd/dx(' },
+    ];
+
+    function buildSciKeyboard() {
+      KB_SYMBOLS.forEach(({ label, insert }) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'sci-key';
+        btn.textContent = label;
+        btn.addEventListener('click', () => {
+          const start = input.selectionStart;
+          const end   = input.selectionEnd;
+          input.value = input.value.slice(0, start) + insert + input.value.slice(end);
+          input.setSelectionRange(start + insert.length, start + insert.length);
+          input.focus();
+        });
+        sciKeyboard.appendChild(btn);
+      });
+    }
+
+    function isKbdOpen() { return sciKeyboard.classList.contains('is-open'); }
+
+    function openKbd()  {
+      sciKeyboard.classList.add('is-open');
+      kbdToggle.classList.add('is-active');
+    }
+
+    function closeKbd() {
+      sciKeyboard.classList.remove('is-open');
+      kbdToggle.classList.remove('is-active');
+    }
+
+    kbdToggle.addEventListener('click', () => {
+      isKbdOpen() ? closeKbd() : openKbd();
+    });
+
+    document.addEventListener('click', e => {
+      if (isKbdOpen() &&
+          !sciKeyboard.contains(e.target) &&
+          e.target !== kbdToggle) {
+        closeKbd();
+      }
+    });
+
+    // ── Utilities ────────────────────────────────────────────────────────
+
+    function emptySolution() {
+      return { problem: "", level: "", visualization_type: "live-equation", steps: [] };
+    }
+
+    function setStatus(text) { statusEl.textContent = text; }
+
+    function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+    function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+    function easeOutQuint(t) { return 1 - Math.pow(1 - t, 5); }
+
+    function formatLabel(value) {
+      return String(value || "--").replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+    }
+
+    function normalizeStep(step, index) {
+      const highlight = Array.isArray(step.highlight)
+        ? step.highlight.filter(Boolean).map(String)
+        : typeof step.highlight === "string" && step.highlight.trim()
+          ? [step.highlight.trim()]
+          : [];
+      return {
+        description:       String(step.description       || `Step ${index + 1}`),
+        writing:           String(step.writing            || ""),
+        action:            String(step.action             || "Explain"),
+        highlight,
+        deeper_explanation: String(step.deeper_explanation || step.deeperExplanation || step.description || "")
+      };
+    }
+
+    function inferVisualization(problem) {
+      const text = String(problem || "").toLowerCase();
+      if (text.includes("integral") || text.includes("∫"))            return "integral";
+      if (text.includes("derivative") || text.includes("d/d"))        return "derivative";
+      if (text.includes("factor"))                                     return "factorization";
+      if (text.includes("/") || text.includes("÷") || text.includes("divid")) return "long-division";
+      if (/[a-z]/i.test(text))                                         return "live-equation";
+      return "columns";
+    }
+
+    function normalizeSolution(data) {
+      const steps = Array.isArray(data.steps) ? data.steps.map(normalizeStep) : [];
+      const visualization = data.visualization_type || inferVisualization(data.problem || "");
+      return {
+        problem:            String(data.problem || input.value.trim()),
+        level:              String(data.level || "high-school"),
+        visualization_type: String(visualization || "live-equation"),
+        steps
+      };
+    }
+
+    function currentStep() { return solution.steps[currentStepIndex] || null; }
+    function hasSolution()  { return solution.steps.length > 0; }
+
+    // ── Data helpers ─────────────────────────────────────────────────────
+
+    function extractParentheticalFactors(text) {
+      return String(text || "").match(/\([^()]+\)/g) || [];
+    }
+
+    function parseArithmetic(problem) {
+      const clean = String(problem || "").replace(/\s+/g, "");
+      const match = clean.match(/^(-?\d+)([+\-])(-?\d+)$/);
+      if (!match) return null;
+      // Strip leading zeros but keep at least one digit
+      const top = match[1].replace(/^0+(?=\d)/, "");
+      const bottom = match[3].replace(/^0+(?=\d)/, "");
+      return { top, op: match[2], bottom };
+    }
+
+    function parseDivision(problem) {
+      const clean = String(problem || "").replace(/\s+/g, "");
+      let match = clean.match(/^(\d+)(?:\/|÷)(\d+)$/);
+      if (match) return { dividend: match[1], divisor: match[2] };
+      match = String(problem || "").match(/(\d+)\s+divided\s+by\s+(\d+)/i);
+      return match ? { dividend: match[1], divisor: match[2] } : null;
+    }
+
+    function extractTrailingNumber(text) {
+      const match = String(text || "").match(/(-?\d+(?:\.\d+)?)\s*$/);
+      return match ? match[1] : String(text || "");
+    }
+
+
+    // ── Font helpers ─────────────────────────────────────────────────────
+
+    function uiFont(size, weight = 500) { return `${weight} ${size}px ${UI_FONT}`; }
+    function handFont(size)              { return `${size}px ${HAND_FONT}`; }
+
+    // Scale a "design" size (based on 900px tall reference) to current H
+    function fs(base) { return Math.round(base * Math.max(0.5, Math.min(2.0, H / 900))); }
+
+    // ── Canvas resize ────────────────────────────────────────────────────
+
+    function resizeCanvas() {
+      W = window.innerWidth;
+      H = window.innerHeight;
+      canvas.width  = Math.round(W * DPR);
+      canvas.height = Math.round(H * DPR);
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+      requestRender();
+    }
+
+    // ── Animation ────────────────────────────────────────────────────────
+
+    function requestRender() {
+      if (animationFrame) return;
+      animationFrame = requestAnimationFrame(renderBoard);
+    }
+
+    function getTransitionState(now) {
+      if (!transition) return null;
+      const raw = clamp((now - transition.startedAt) / transition.duration, 0, 1);
+      const eased = prefersReducedMotion ? 1 : easeOutQuint(raw);
+      if (raw >= 1) { transition = null; return null; }
+      return { ...transition, raw, eased };
+    }
+
+    function getPulseStrength(now) {
+      if (!highlightPulse) return 0;
+      const progress = clamp((now - highlightPulse.startedAt) / highlightPulse.duration, 0, 1);
+      if (progress >= 1) { highlightPulse = null; return 0; }
+      return 1 - progress;
+    }
+
+    // ── Drawing helpers ──────────────────────────────────────────────────
+
+    function roundedRect(x, y, w, h, r) {
+      const radius = Math.min(r, w / 2, h / 2);
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.arcTo(x + w, y, x + w, y + h, radius);
+      ctx.arcTo(x + w, y + h, x, y + h, radius);
+      ctx.arcTo(x, y + h, x, y, radius);
+      ctx.arcTo(x, y, x + w, y, radius);
+      ctx.closePath();
+    }
+
+    function mathColor(char, action) {
+      if (/=/.test(char))              return COLORS.accent;
+      if (/[+\-/*÷]/.test(char))      return COLORS.warm;
+      if (/[a-z]/i.test(char))        return COLORS.accent;
+      if (/\d/.test(char) && /result/i.test(action)) return COLORS.success;
+      return COLORS.ink;
+    }
+
+    function findRanges(text, terms) {
+      const ranges = [];
+      const source = String(text);
+      terms.forEach(term => {
+        const needle = String(term || "").trim();
+        if (!needle) return;
+        let i = 0;
+        while (i < source.length) {
+          const at = source.toLowerCase().indexOf(needle.toLowerCase(), i);
+          if (at === -1) break;
+          ranges.push([at, at + needle.length]);
+          i = at + needle.length;
+        }
+      });
+      return ranges;
+    }
+
+    function drawHandText(text, x, y, options = {}) {
+      const font           = options.font           || handFont(fs(72));
+      const align          = options.align          || 'left';
+      const tracking       = options.tracking       ?? 0.6;
+      const alpha          = options.alpha          ?? 1;
+      const progress       = options.progress       ?? 1;
+      const highlightTerms = options.highlightTerms || [];
+      const highlightAlpha = options.highlightAlpha ?? 0.3;
+
+      ctx.save();
+      ctx.font = font;
+
+      const chars  = Array.from(String(text));
+      const widths = chars.map(c => ctx.measureText(c).width + tracking);
+      const total  = widths.reduce((s, w) => s + w, 0);
+
+      let startX = x;
+      if (align === 'center') startX = x - total / 2;
+      if (align === 'right')  startX = x - total;
+
+      const positions = [];
+      let cursor = startX;
+      chars.forEach((_, i) => { positions.push(cursor); cursor += widths[i]; });
+
+      const ranges = findRanges(text, highlightTerms);
+      ctx.globalAlpha = alpha;
+      ranges.forEach(([lo, hi]) => {
+        const left  = positions[lo]  ?? startX;
+        const ri    = Math.max(hi - 1, lo);
+        const right = (positions[ri] ?? startX) + (widths[ri] || 0);
+        ctx.fillStyle = COLORS.highlight;
+        roundedRect(left - 8, y - fs(48), right - left + 16, fs(60), 18);
+        ctx.globalAlpha = alpha * highlightAlpha;
+        ctx.fill();
+        ctx.globalAlpha = alpha;
+      });
+
+      const totalChars = chars.length;
+      const charDuration = 1 / (totalChars || 1);
+
+      chars.forEach((c, i) => {
+        const charStart = i * charDuration;
+        const charEnd = (i + 1) * charDuration;
+        const charProgress = clamp((progress - charStart) / charDuration, 0, 1);
+        if (charProgress <= 0) return;
+
+        ctx.save();
+        ctx.fillStyle = (options.colorForChar || mathColor)(c, options.action || "");
+        
+        if (charProgress < 1) {
+          const strokes = getStrokesForChar(c, font);
+          if (strokes.length) {
+            ctx.beginPath();
+            const fontSize = parseFloat(font) || fs(72);
+            const brushSize = fontSize * 0.45;
+            let totalStrokePoints = strokes.reduce((acc, s) => acc + s.length, 0);
+            let drawnPoints = 0;
+            for (const stroke of strokes) {
+                for (const p of stroke) {
+                    drawnPoints++;
+                    if (drawnPoints / totalStrokePoints > charProgress) break;
+                    const px = (positions[i] + widths[i] / 2) + p.x * fontSize;
+                    const py = y + p.y * fontSize;
+                    ctx.moveTo(px + brushSize/2, py);
+                    ctx.arc(px, py, brushSize/2, 0, Math.PI * 2);
+                }
+                if (drawnPoints / totalStrokePoints > charProgress) break;
+            }
+            ctx.clip();
+          }
+        }
+        
+        ctx.fillText(c, positions[i], y);
+        ctx.restore();
+      });
+
+      ctx.restore();
+      return total;
+    }
+
+    // ── Board base ───────────────────────────────────────────────────────
+
+    function drawBoardBase() {
+      const gradient = ctx.createLinearGradient(0, 0, 0, H);
+      gradient.addColorStop(0, COLORS.paper);
+      gradient.addColorStop(1, COLORS.paperEdge);
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    function drawBoardHeader(now) {
+      const stepAge = now - solutionLoadTime;
+      const writeProgress = clamp(stepAge / 1200, 0, 1);
+      ctx.save();
+      drawHandText(solution.problem, fs(52), fs(60), {
+        font: uiFont(fs(19), 500), colorForChar: () => COLORS.muted, progress: writeProgress
+      });
+      ctx.restore();
+    }
+
+    // ── Step caption (action label only — description is in HTML) ────────
+
+    function drawStepCaption(step, now) {
+      const CX = W / 2;
+      // Leave room for the floating bar + timeline (~140px from bottom)
+      const Y_CAP = H - fs(148);
+      const stepAge = now - stepLoadedTime;
+      const writeProgress = clamp(stepAge / 800, 0, 1);
+
+      ctx.save();
+      drawHandText(step.action.toUpperCase(), CX, Y_CAP, {
+        align: "center", font: uiFont(fs(18), 700), colorForChar: () => COLORS.accent, progress: writeProgress
+      });
+      drawHandText(step.description, CX, Y_CAP + fs(36), {
+        align: "center", font: uiFont(fs(28), 500), colorForChar: () => COLORS.muted, progress: writeProgress
+      });
+      ctx.restore();
+    }
+
+    // ── Animation helpers ────────────────────────────────────────────────
+
+    function activeHighlightTerms(pulseStrength) {
+      const step = currentStep();
+      if (!step) return [];
+      if (!highlightPulse || highlightPulse.stepIndex !== currentStepIndex || pulseStrength <= 0) {
+        return step.highlight;
+      }
+      return highlightPulse.terms.length ? highlightPulse.terms : step.highlight;
+    }
+
+    function drawPreviousLine(step, x, y, transitionState) {
+      if (!step) return;
+      drawHandText(step.writing, x, y, {
+        align: 'center',
+        font: handFont(fs(46)),
+        alpha: transitionState ? 0.14 + (1 - transitionState.eased) * 0.16 : 0.18,
+        action: step.action
+      });
+    }
+
+    // ── Renderers ────────────────────────────────────────────────────────
+
+    function renderLiveEquation({ transitionState, pulseStrength, now }) {
+      const step       = currentStep();
+      const activeTerms = activeHighlightTerms(pulseStrength);
+      const CX         = W / 2;
+      const Y_PREV     = H * 0.34;
+      const Y_MAIN     = H * 0.50;
+      const previous   = transitionState
+        ? solution.steps[transitionState.from]
+        : solution.steps[Math.max(0, currentStepIndex - 1)];
+
+      const stepAge = now - stepLoadedTime;
+      const writeProgress = clamp(stepAge / 1000, 0, 1);
+
+      drawHandText(
+        previous && previous !== step ? previous.writing : "",
+        CX,
+        Y_PREV - (transitionState ? transitionState.eased * fs(28) : 0),
+        {
+          align: "center",
+          font: handFont(fs(46)),
+          alpha: transitionState ? 0.14 + (1 - transitionState.eased) * 0.16 : 0.18,
+          action: previous ? previous.action : "",
+          progress: 1
+        }
+      );
+      drawHandText(step.writing,
+        CX + (transitionState ? (1 - transitionState.eased) * fs(40) : 0),
+        Y_MAIN, {
+          align: "center",
+          font: handFont(fs(108)),
+          action: step.action,
+          highlightTerms: activeTerms,
+          highlightAlpha: 0.32 + pulseStrength * 0.22,
+          progress: writeProgress
+        });
+      drawStepCaption(step, now);
+    }
+
+    function renderFactorization({ transitionState, pulseStrength, now }) {
+      const step        = currentStep();
+      const factors     = extractParentheticalFactors(step.writing);
+      const activeTerms = activeHighlightTerms(pulseStrength);
+      const CX          = W / 2;
+      const Y_PREV      = H * 0.32;
+      const Y_MAIN      = H * 0.46;
+      const Y_FACTORS   = H * 0.70;
+      const previous    = transitionState && transitionState.from !== transitionState.to
+        ? solution.steps[transitionState.from] : null;
+
+      const stepAge = now - stepLoadedTime;
+      const writeProgress = clamp(stepAge / 1000, 0, 1);
+
+      if (previous) {
+        drawHandText(previous.writing, CX, Y_PREV, {
+          align: "center", font: handFont(fs(46)), alpha: 0.2, progress: 1
+        });
+      }
+
+      drawHandText(step.writing, CX, Y_MAIN, {
+        align: "center",
+        font: handFont(fs(96)),
+        action: step.action,
+        highlightTerms: activeTerms,
+        highlightAlpha: 0.34 + pulseStrength * 0.18,
+        progress: writeProgress
+      });
+
+      if (factors.length) {
+        const factorStartX = CX - ((factors.length - 1) * fs(220)) / 2;
+        ctx.save();
+        ctx.textAlign = "center";
+        ctx.fillStyle = COLORS.muted;
+        ctx.font = uiFont(fs(16), 600);
+        ctx.fillText("Factors", CX, Y_FACTORS - fs(40));
+        ctx.textAlign = "left";
+        factors.forEach((factor, i) => {
+          drawHandText(factor, factorStartX + i * fs(220), Y_FACTORS, {
+            font: handFont(fs(50)),
+            highlightTerms: activeTerms,
+            action: step.action,
+            progress: writeProgress
+          });
+        });
+        ctx.restore();
+      }
+      drawStepCaption(step, now);
+    }
+
+    function renderAdditionColumns(aStr, bStr, { transitionState, pulseStrength, now }) {
+      // Strip leading zeros for calculation and display
+      aStr = aStr.replace(/^0+(?=\d)/, "");
+      bStr = bStr.replace(/^0+(?=\d)/, "");
+      
+      const n = Math.max(aStr.length, bStr.length);
+      const aD = aStr.padStart(n, "0").split("").map(Number).reverse();
+      const bD = bStr.padStart(n, "0").split("").map(Number).reverse();
+
+      const carries = [0];
+      const sumD = [];
+      for (let i = 0; i < n; i++) {
+        const total = aD[i] + bD[i] + (carries[i] || 0);
+        sumD[i] = total % 10;
+        carries[i + 1] = Math.floor(total / 10);
+      }
+      if (carries[n] > 0) sumD[n] = carries[n];
+      const R = sumD.length;
+
+      const totalSteps = solution.steps.length || 1;
+      const progressSteps = (currentStepIndex + 1) / totalSteps;
+      const colsRev = Math.max(1, Math.floor(progressSteps * R));
+      
+      const prevProgress = transitionState ? (transitionState.from + 1) / totalSteps : progressSteps;
+      const prevCols = Math.max(1, Math.floor(prevProgress * R));
+
+      ctx.font = handFont(fs(88));
+      const DIGIT_W = ctx.measureText("0").width + fs(10);
+      const colCX = (c) => W / 2 + ((R - 1) * 0.5 - c) * DIGIT_W;
+
+      const Y_A  = H * 0.30;
+      const Y_B  = Y_A + fs(98);
+      const Y_LN = Y_B + fs(16);
+      const Y_R  = Y_LN + fs(22) + fs(88) * 0.85;
+      const Y_C  = Y_A - fs(62);
+
+      const stepAge = now - stepLoadedTime;
+      const writeProgress = clamp(stepAge / 850, 0, 1);
+
+      // + sign
+      drawHandText("+", colCX(n - 1) - DIGIT_W * 1.3, Y_B, {
+        font: handFont(fs(72)), align: "center", colorForChar: () => COLORS.warm, progress: 1
+      });
+
+      // Top number
+      for (let c = 0; c < n; c++) {
+        if (c >= aStr.length) continue;
+        drawHandText(String(aD[c]), colCX(c), Y_A, {
+          font: handFont(fs(88)), align: "center", progress: 1
+        });
+      }
+
+      // Bottom number
+      for (let c = 0; c < n; c++) {
+        if (c >= bStr.length) continue;
+        drawHandText(String(bD[c]), colCX(c), Y_B, {
+          font: handFont(fs(88)), align: "center", progress: 1
+        });
+      }
+
+      // Separator line
+      ctx.save();
+      ctx.strokeStyle = COLORS.ink;
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      const lineLeft = colCX(R - 1) - DIGIT_W;
+      const lineRight = colCX(0) + DIGIT_W * 0.5;
+      const lx = lineLeft + (lineRight - lineLeft) * (currentStepIndex === 0 ? writeProgress : 1);
+      ctx.moveTo(lineLeft, Y_LN);
+      ctx.lineTo(lx, Y_LN);
+      ctx.stroke();
+      ctx.restore();
+
+      // Result digits
+      for (let c = 0; c < colsRev; c++) {
+        const isNew = c >= prevCols;
+        drawHandText(String(sumD[c]), colCX(c), Y_R, {
+          font: handFont(fs(92)), align: "center", colorForChar: () => COLORS.success, progress: isNew ? writeProgress : 1
+        });
+      }
+
+      // Carry markers
+      for (let c = 1; c <= n; c++) {
+        if (!carries[c]) continue;
+        if (colsRev < c) continue;
+        const isNew = prevCols < c;
+        drawHandText(String(carries[c]), colCX(c), Y_C, {
+          font: handFont(fs(38)), align: "center", colorForChar: () => COLORS.warm, progress: isNew ? writeProgress : 1
+        });
+      }
+      drawStepCaption(currentStep(), now);
+    }
+
+    function renderColumns({ transitionState, pulseStrength, now }) {
+      const step       = currentStep();
+      const arithmetic = parseArithmetic(solution.problem);
+      const activeTerms = activeHighlightTerms(pulseStrength);
+      const stepAge = now - stepLoadedTime;
+      const writeProgress = clamp(stepAge / 1000, 0, 1);
+
+      if (arithmetic && arithmetic.op === "+") {
+        renderAdditionColumns(arithmetic.top, arithmetic.bottom, { transitionState, pulseStrength, now });
+      } else if (arithmetic) {
+        // Subtraction: simple right-aligned column display
+        const rightX = W * 0.56;
+        const topY   = H * 0.30;
+        const rowGap = fs(88);
+        drawHandText(arithmetic.top, rightX, topY, {
+          align: "right", font: handFont(fs(88)), action: step.action, progress: 1
+        });
+        drawHandText(`${arithmetic.op}${arithmetic.bottom}`, rightX, topY + rowGap, {
+          align: "right", font: handFont(fs(88)), action: step.action,
+          highlightTerms: activeTerms, highlightAlpha: 0.22 + pulseStrength * 0.15,
+          progress: writeProgress
+        });
+        ctx.save();
+        ctx.strokeStyle = COLORS.ink; ctx.lineWidth = 3; ctx.beginPath();
+        const lx = (rightX - fs(240)) + fs(248) * writeProgress;
+        ctx.moveTo(rightX - fs(240), topY + rowGap + fs(22));
+        ctx.lineTo(lx,   topY + rowGap + fs(22));
+        ctx.stroke(); ctx.restore();
+        drawHandText(extractTrailingNumber(step.writing), rightX, topY + rowGap * 2, {
+          align: "right", font: handFont(fs(92)), action: "Result",
+          highlightTerms: activeTerms, highlightAlpha: 0.28 + pulseStrength * 0.22,
+          progress: writeProgress
+        });
+      } else {
+        drawHandText(step.writing, W / 2, H * 0.50, {
+          align: "center", font: handFont(fs(88)), action: step.action,
+          highlightTerms: activeTerms, highlightAlpha: 0.28 + pulseStrength * 0.2,
+          progress: writeProgress
+        });
+      }
+      drawStepCaption(step, now);
+    }
+
+    function renderLongDivision({ pulseStrength, now }) {
+      const step        = currentStep();
+      const division    = parseDivision(solution.problem);
+      const activeTerms = activeHighlightTerms(pulseStrength);
+      const stepAge = now - stepLoadedTime;
+      const writeProgress = clamp(stepAge / 1000, 0, 1);
+
+      // Mexican/Latin American layout:
+      //   dividend  |  divisor
+      //             |----------
+      //             |  quotient
+      const VBAR      = W * 0.46;
+      const Y_TOP     = H * 0.24;
+      const Y_HBAR    = H * 0.44;
+      const Y_BOT     = H * 0.70;
+      const BAR_W     = W * 0.18;
+      const RIGHT_CX  = VBAR + BAR_W / 2;
+
+      ctx.save();
+      ctx.strokeStyle = COLORS.ink;
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      // Animate vertical bar
+      const vy = Y_TOP + (Y_BOT - Y_TOP) * writeProgress;
+      ctx.moveTo(VBAR, Y_TOP);
+      ctx.lineTo(VBAR, vy);
+      // Animate horizontal bar
+      const hx = VBAR + BAR_W * writeProgress;
+      ctx.moveTo(VBAR, Y_HBAR);
+      ctx.lineTo(hx, Y_HBAR);
+      ctx.stroke();
+      ctx.restore();
+
+      if (division) {
+        drawHandText(division.dividend, VBAR - fs(24), (Y_TOP + Y_BOT) / 2 + fs(24), {
+          align: "right", font: handFont(fs(88)), action: step.action, progress: 1
+        });
+        drawHandText(division.divisor, RIGHT_CX, (Y_TOP + Y_HBAR) / 2 + fs(22), {
+          align: "center", font: handFont(fs(80)), action: step.action, progress: 1
+        });
+        const quotient = extractTrailingNumber(solution.steps[solution.steps.length - 1].writing);
+        drawHandText(quotient, RIGHT_CX, (Y_HBAR + Y_BOT) / 2 + fs(22), {
+          align: "center", font: handFont(fs(70)), action: "Result", alpha: 0.55, progress: writeProgress
+        });
+      }
+
+      drawHandText(step.writing, W / 2, H * 0.80, {
+        align: "center", font: handFont(fs(60)),
+        action: step.action, highlightTerms: activeTerms,
+        highlightAlpha: 0.28 + pulseStrength * 0.18,
+        progress: writeProgress
+      });
+
+      drawStepCaption(step, now);
+    }
+
+    function renderCalculus(mode, { transitionState, pulseStrength, now }) {
+      const step        = currentStep();
+      const activeTerms = activeHighlightTerms(pulseStrength);
+      const CX          = W / 2;
+      const Y_LABEL     = H * 0.20;
+      const Y_ORIG      = H * 0.30;
+      const Y_PREV      = H * 0.34;
+      const Y_MAIN      = H * 0.52;
+      const previous    = transitionState
+        ? solution.steps[transitionState.from]
+        : solution.steps[Math.max(0, currentStepIndex - 1)];
+
+      const stepAge = now - stepLoadedTime;
+      const writeProgress = clamp(stepAge / 1000, 0, 1);
+
+      ctx.save();
+      ctx.textAlign = "center";
+      ctx.fillStyle = COLORS.muted;
+      ctx.font = uiFont(fs(16), 600);
+      ctx.fillText(mode === "integral" ? "Integral" : "Derivative", CX, Y_LABEL);
+      ctx.restore();
+
+      drawHandText(solution.steps[0].writing || solution.problem, CX, Y_ORIG, {
+        align: "center", font: handFont(fs(46)),
+        action: solution.steps[0].action, alpha: 0.42, progress: 1
+      });
+      if (previous && previous !== step) {
+        drawHandText(previous.writing, CX, Y_PREV, {
+            align: "center", font: handFont(fs(40)), alpha: 0.15, progress: 1
+        });
+      }
+      drawHandText(step.writing, CX, Y_MAIN, {
+        align: "center", font: handFont(fs(100)),
+        action: step.action, highlightTerms: activeTerms,
+        highlightAlpha: 0.32 + pulseStrength * 0.18,
+        progress: writeProgress
+      });
+      drawStepCaption(step, now);
+    }
+
+    const renderers = {
+      'columns':       renderColumns,
+      'long-division': renderLongDivision,
+      'live-equation': renderLiveEquation,
+      'factorization': renderFactorization,
+      'derivative':    args => renderCalculus('derivative', args),
+      'integral':      args => renderCalculus('integral', args)
+    };
+
+    // ── Main render loop ─────────────────────────────────────────────────
+
+    const CONTENT_ENTER_MS = 640;
+
+    function renderBoard(now) {
+      animationFrame = null;
+      const transitionState = getTransitionState(now);
+      const pulseStrength   = getPulseStrength(now);
+
+      ctx.clearRect(0, 0, W, H);
+      drawBoardBase();
+
+      if (!hasSolution()) {
+        if (transitionState || pulseStrength > 0) requestRender();
+        return;
+      }
+
+      // Canvas content entrance: fade + gentle upward drift on solve
+      const contentAge   = now - solutionLoadTime;
+      const contentT     = prefersReducedMotion ? 1 : Math.min(1, contentAge / CONTENT_ENTER_MS);
+      const contentAlpha = easeOutQuint(contentT);
+      const contentDY    = (1 - easeOutQuint(Math.min(1, contentAge / (CONTENT_ENTER_MS * 0.7)))) * 22;
+      const entering     = contentT < 1;
+
+      if (entering) {
+        ctx.save();
+        ctx.globalAlpha = contentAlpha;
+        ctx.translate(0, contentDY);
+      }
+
+      drawBoardHeader(now);
+      const renderer = renderers[solution.visualization_type] || renderers["live-equation"];
+      renderer({ now, transitionState, pulseStrength });
+
+      if (entering) ctx.restore();
+
+      const stepAge = now - stepLoadedTime;
+      const animatingHandwriting = stepAge < 1200;
+
+      if (entering || transitionState || pulseStrength > 0 || animatingHandwriting) requestRender();
+    }
+
+    // ── Timeline ─────────────────────────────────────────────────────────
+
+    function updateTimeline() {
+      timelineEl.querySelectorAll('.tl-seg').forEach((seg, i) => {
+        seg.classList.toggle('is-done',    i < currentStepIndex);
+        seg.classList.toggle('is-current', i === currentStepIndex);
+      });
+    }
+
+    function rebuildTimeline() {
+      timelineEl.innerHTML = '';
+      const n = solution.steps.length;
+      if (n === 0) { timelineEl.classList.remove('has-steps'); return; }
+      timelineEl.classList.add('has-steps');
+      for (let i = 0; i < n; i++) {
+        const seg = document.createElement('div');
+        seg.className = 'tl-seg';
+        seg.setAttribute('role', 'button');
+        seg.setAttribute('tabindex', '0');
+        seg.setAttribute('aria-label', `Step ${i + 1} of ${n}`);
+        const idx = i;
+        seg.addEventListener('click', () => { clearAutoAdvance(); goToStep(idx); });
+        seg.addEventListener('keydown', e => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault(); clearAutoAdvance(); goToStep(idx);
+          }
+        });
+        timelineEl.appendChild(seg);
+      }
+      updateTimeline();
+    }
+
+    // ── Auto-advance ─────────────────────────────────────────────────────
+
+    function clearAutoAdvance() {
+      if (autoAdvanceTimer) { clearTimeout(autoAdvanceTimer); autoAdvanceTimer = null; }
+    }
+
+    function scheduleNextStep() {
+      clearAutoAdvance();
+      if (currentStepIndex + 1 >= solution.steps.length) return;
+      autoAdvanceTimer = setTimeout(() => {
+        autoAdvanceTimer = null;
+        goToStep(currentStepIndex + 1);
+        scheduleNextStep();
+      }, 3500); // More time to read + see animation
+    }
+
+    // ── Step navigation ──────────────────────────────────────────────────
+
+    function goToStep(index, options = {}) {
+      if (!hasSolution()) return;
+      const animate       = options.animate !== false;
+      const nextIndex     = clamp(index, 0, solution.steps.length - 1);
+      const previousIndex = currentStepIndex;
+      currentStepIndex    = nextIndex;
+      stepLoadedTime      = performance.now();
+
+      if (animate && !prefersReducedMotion && previousIndex !== nextIndex) {
+        transition = {
+          from: previousIndex, to: nextIndex,
+          startedAt: stepLoadedTime, duration: 420
+        };
+      } else {
+        transition = null;
+      }
+      updateTimeline();
+      requestRender();
+    }
+
+    // ── Load solution ────────────────────────────────────────────────────
+
+    function loadSolution(data, sourceLabel) {
+      const next = normalizeSolution(data);
+      if (!next.steps.length) throw new Error('No steps returned.');
+      clearAutoAdvance();
+      solution         = next;
+      currentStepIndex = 0;
+      transition       = null;
+      highlightPulse   = null;
+      solutionLoadTime = performance.now();  // triggers canvas entrance animation
+      stepLoadedTime   = solutionLoadTime;
+      rebuildTimeline();
+      requestRender();
+      
+      const imgContainer = document.getElementById('helper-image-container');
+      const helperImg = document.getElementById('helper-image');
+      if (data.helper_image) {
+          helperImg.src = data.helper_image;
+          imgContainer.classList.add('is-visible');
+      } else {
+          imgContainer.classList.remove('is-visible');
+      }
+
+      setStatus(`${sourceLabel} loaded.`);
+      // Start auto-advance after the entrance animation finishes
+      setTimeout(() => scheduleNextStep(), CONTENT_ENTER_MS + 800);
+    }
+
+    // ── Solve ────────────────────────────────────────────────────────────
+
+    solveBtn.addEventListener('click', async () => {
+      const problem = input.value.trim();
+      if (!problem) return;
+      clearAutoAdvance();
+      solveBtn.disabled    = true;
+      solveBtn.textContent = 'Solving…';
+      solveBtn.classList.add('is-loading');
+      setStatus('Pizarra is building a structured solution.');
+      solution = emptySolution();
+      timelineEl.classList.remove('has-steps');
+      timelineEl.innerHTML = '';
+      document.getElementById('helper-image-container').classList.remove('is-visible');
+      requestRender();
+      try {
+        const response = await fetch('/solve', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ problem })
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        loadSolution(await response.json(), 'Solution');
+      } catch (err) {
+        console.error(err);
+        setStatus('Something went wrong. Please try again.');
+      } finally {
+        solveBtn.disabled    = false;
+        solveBtn.textContent = 'Solve';
+        solveBtn.classList.remove('is-loading');
+      }
+    });
+
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); solveBtn.click(); }
+      if (e.key === 'Escape' && isKbdOpen()) { closeKbd(); }
+    });
+
+    // ── Boot ─────────────────────────────────────────────────────────────
+
+    window.addEventListener('resize', resizeCanvas);
+
+    document.fonts.ready.then(() => {
+      buildSciKeyboard();
+      resizeCanvas();
+      requestRender();
+    });
+  </script>
+</body>
+</html>
